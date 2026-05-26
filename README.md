@@ -1,7 +1,7 @@
 # Group 60 — AfriSenti Sentiment Analysis
 
 **COS760 Natural Language Processing | University of Pretoria | 2026**
-**Authors:** Praises Obi (u26819661) | Ishe Allen Chihobo (u22592238)
+**Authors:** Praises Obi (u26819661) | Ishe Allen Chihobo (u22592238) | Olaperi Okuboyejo
 
 ## Project Overview
 Sentiment analysis across five African languages (Hausa, Yorùbá, Igbo,
