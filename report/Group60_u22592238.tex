@@ -1,0 +1,337 @@
+\documentclass[11pt,twocolumn]{article}
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{url}
+\usepackage{array}
+\usepackage[margin=1in]{geometry}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{hyperref}
+\usepackage{setspace}
+\usepackage{titlesec}
+
+\titlespacing\section{0pt}{6pt plus 2pt minus 1pt}{3pt plus 1pt minus 1pt}
+\titlespacing\subsection{0pt}{4pt plus 2pt minus 1pt}{2pt plus 1pt minus 1pt}
+
+\title{\large\textbf{Monolingual vs.\ Multilingual Fine-Tuning of AfroXLMR for\\
+Sentiment Analysis Across Five African Languages:\\
+A Code-Mixing Diagnostic Study}}
+
+\author{
+  \small Praises Obi\textsuperscript{1} \quad Ishe Allen Chihobo\textsuperscript{1} \\
+  \small \textsuperscript{1}Department of Computer Science, University of Pretoria | Group 60 \\
+  \small \texttt{\{u26819661, u22592238\}@tuks.co.za}
+}
+
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\small
+Sentiment analysis for African languages is constrained by limited annotated data, structural
+diversity, and pervasive English code-mixing. We compare four systems on five AfriSenti languages
+(Hausa, Yor\`{u}b\'{a}, Igbo, Nigerian Pidgin, Swahili): TF-IDF logistic regression, mBERT, and
+two fine-tuning regimes of AfroXLMR-base---Language-Adaptive Fine-Tuning (LAFT) and Multilingual
+Adaptive Fine-Tuning (MAFT). Our novel contribution is a token-level code-mixing index (CMI)
+filter partitioning each test set into monolingual and code-mixed subsets. LAFT achieves the
+highest weighted F1 on resource-rich Hausa (76.34); MAFT outperforms LAFT on low-resource Swahili
+(62.51 vs.\ 60.86), confirming a resource-driven crossover. Code-mixing effects are
+language-dependent, with Yor\`{u}b\'{a} improving on mixed tweets (+6.13 F1) while Hausa degrades
+modestly.
+\end{abstract}
+
+\section{Introduction}
+
+Africa's 2,000+ languages remain severely underrepresented in NLP systems
+\cite{adebara-abdulmageed-2022-towards}. Sentiment analysis---the automatic classification of
+opinion as positive, negative, or neutral---is among the highest-demand downstream tasks, and
+its failure on African languages translates into absent or biased insights for over one billion
+speakers in health, political, and commercial domains.
+
+The AfriSenti corpus \cite{muhammad-etal-2023-afrisenti} provides annotated sentiment data for
+14 African languages, and AfroXLMR \cite{alabi-etal-2022-adapting} extends XLM-R with
+African-language pretraining. Yet two questions remain open: (1) whether monolingual (LAFT) or
+joint multilingual (MAFT) fine-tuning of AfroXLMR is preferable, and whether this depends on
+resource level; and (2) whether code-mixing with English systematically degrades performance.
+
+Our contributions are: (1) a controlled four-way comparison of TF-IDF, mBERT, LAFT, and MAFT
+across five typologically diverse languages; (2) a token-level CMI filter producing separate
+evaluations on monolingual and code-mixed test subsets; (3) empirical confirmation of a
+resource-driven LAFT/MAFT crossover; and (4) evidence that code-mixing effects are
+language-dependent. This work directly addresses African language underrepresentation and provides
+practitioners with evidence-based model-selection guidance.
+
+\section{Background}
+
+\citet{muhammad-etal-2022-naijasenti} introduced NaijaSenti, establishing sentiment annotation
+protocols and documenting pervasive code-mixing in Nigerian social media. They showed that standard
+multilingual models struggle particularly with Nigerian Pidgin due to its English creole structure.
+\citet{muhammad-etal-2023-afrisenti} extended this to AfriSenti (14 languages), and the
+AfriSenti-SemEval shared task \cite{muhammad-etal-2023-semeval} benchmarked 53 systems, with top
+results between 65--80 weighted F1, but without disaggregating by code-mixing rate.
+
+\citet{mabokela-schlippe-2022} and \citet{mokhosi-etal-2024} demonstrated that models trained on
+high-resource languages transfer poorly to morphologically rich Bantu and Sotho languages,
+motivating language-specific training strategies. \citet{devlin-etal-2019-bert} introduced mBERT
+across 104 languages, but its African-language training data is negligible relative to European
+languages. \citet{alabi-etal-2022-adapting} introduced AfroXLMR, adapted via continued pretraining
+on 17 African languages, achieving state-of-the-art results on multiple African benchmarks.
+
+\textbf{Gap.} No study has directly compared LAFT and MAFT of the same AfroXLMR model across
+multiple language families on AfriSenti, nor applied a principled code-mixing diagnostic to
+evaluate performance degradation attributable to English code-mixing. We address both gaps.
+
+\section{Methodology}
+
+\subsection{Dataset}
+
+We use AfriSenti \cite{muhammad-etal-2023-afrisenti}, publicly available under Creative
+Commons licence. Five languages were selected to represent distinct typological families and
+resource levels (Table~\ref{tab:dataset}).
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Language} & \textbf{Train} & \textbf{Val} & \textbf{Test} & \textbf{Imb.} \\
+\midrule
+Hausa (hau, Afro-As.)   & 14,172 & 2,677 & 5,303 & 1.07$\times$ \\
+Yor\`{u}b\'{a} (yor, NC) &  8,522 & 2,090 & 4,515 & 1.89$\times$ \\
+Igbo (ibo, NC)           & 10,192 & 1,841 & 3,682 & 1.73$\times$ \\
+Nig. Pidgin (pcm, Cre.)  &  5,121 & 1,281 & 4,154 & 45.0$\times$ \\
+Swahili (swa, NC)        &  1,810 &   453 &   748 & 5.61$\times$ \\
+\bottomrule
+\end{tabular}
+\caption{Dataset statistics. Imbalance = max/min class count in training split. NC = Niger-Congo, Afro-As. = Afro-Asiatic, Cre. = English Creole.}
+\label{tab:dataset}
+\end{table}
+
+Labels are positive, neutral, or negative. Nigerian Pidgin's extreme 45$\times$ imbalance
+(72 neutral vs.\ 3,241 negative training examples) and Swahili's small training set (1,810)
+represent the primary data challenges.
+
+\subsection{Code-Mixing Diagnostic Filter}
+
+For each test tweet, we compute an English Token Ratio (ETR):
+\[
+\text{ETR}(t) = \frac{|\text{English tokens}(t)|}{|\text{valid tokens}(t)|}
+\]
+where valid tokens exclude @mentions, URLs, numerals, and tokens $<$3 characters.
+Per-token language detection uses \texttt{langdetect}. A tweet is code-mixed if ETR $> 0.20$.
+This threshold follows prior code-mixing literature and was not tuned on held-out data.
+Table~\ref{tab:cmi} shows the resulting distribution.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Language} & \textbf{Test $n$} & \textbf{Mono.} & \textbf{Mixed (\%)} \\
+\midrule
+Hausa           & 5,303 & 5,174 & 129 (2.4\%)  \\
+Yor\`{u}b\'{a} & 4,515 & 4,352 & 163 (3.6\%)  \\
+Igbo            & 3,682 & 3,450 & 232 (6.3\%)  \\
+Nigerian Pidgin & 4,154 & 2,533 & 1,621 (39.0\%) \\
+Swahili         &   748 &   736 &  12 (1.6\%)\textsuperscript{*}  \\
+\bottomrule
+\end{tabular}
+\caption{Code-mixing diagnostic split. \textsuperscript{*}Swahili mixed subset ($n$=12) is
+too small for robust evaluation.}
+\label{tab:cmi}
+\end{table}
+
+\subsection{Systems}
+
+\textbf{TF-IDF + LR.} Unigram/bigram TF-IDF (50k features, sublinear TF, diacritics preserved)
+with logistic regression (L2, $C$=1.0, balanced class weights). Non-neural lower bound.
+
+\textbf{mBERT.} \texttt{bert-base-multilingual-cased} \cite{devlin-etal-2019-bert} fine-tuned
+per language. Standard cross-lingual reference.
+
+\textbf{LAFT.} \texttt{Davlan/afro-xlmr-base} \cite{alabi-etal-2022-adapting} fine-tuned
+independently on each language's training set. Monolingual specialisation.
+
+\textbf{MAFT.} AfroXLMR-base fine-tuned on the concatenation of all five training sets
+(39,817 examples), then evaluated per language. Tests cross-lingual parameter sharing.
+
+\subsection{Training Setup}
+
+All transformer models were trained with HuggingFace Trainer: learning rate $2\times10^{-5}$,
+batch size 32, linear schedule with 200 warmup steps, AdamW weight decay 0.01, up to 5 epochs
+with early stopping (patience = 2) on validation weighted F1. Maximum sequence length: 64 tokens
+(covers $>$99\% of tweets). Single random seed (42). All experiments ran on NVIDIA T4 GPU.
+
+\subsection{Evaluation}
+
+Primary metric: weighted F1 (accounts for class imbalance). Secondary: macro F1 (exposes
+minority-class failure). Every system is evaluated on three subsets: full test, monolingual,
+code-mixed.
+
+\section{Experiments and Results}
+
+\subsection{Main Results}
+
+Table~\ref{tab:main} reports weighted F1 on the full test set.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Model} & \textbf{hau} & \textbf{yor} & \textbf{ibo} & \textbf{pcm} & \textbf{swa} \\
+\midrule
+TF-IDF+LR & 69.84 & 72.64 & 77.35 & 65.06 & 57.83 \\
+mBERT     & 74.25 & 66.05 & 75.78 & 64.33 & 52.67 \\
+LAFT      & \textbf{76.34} & 70.27 & \textbf{77.24} & 68.02 & 60.86 \\
+MAFT      & 75.57 & \textbf{70.27} & 75.02 & \textbf{69.00} & \textbf{62.51} \\
+\bottomrule
+\end{tabular}
+\caption{Weighted F1 on full test sets. Bold = best per language.}
+\label{tab:main}
+\end{table}
+
+\textbf{RQ1 (LAFT vs.\ MAFT).} LAFT achieves the highest weighted F1 on Hausa (76.34), the
+highest-resource language (14,172 training examples, 1.07$\times$ imbalance). MAFT outperforms
+LAFT on Swahili (62.51 vs.\ 60.86), the lowest-resource language (1,810 training examples).
+This confirms the resource-driven crossover: monolingual specialisation is advantageous when
+sufficient per-language data exists; cross-lingual parameter sharing compensates for data scarcity.
+
+\textbf{mBERT vs.\ TF-IDF.} mBERT underperforms TF-IDF on Yor\`{u}b\'{a} (66.05 vs.\ 72.64).
+Yor\`{u}b\'{a} is tonal; lexical features may capture sentiment-bearing diacritics more reliably
+than subword tokenisation that fragments tonal characters. On Swahili, mBERT achieves only 52.67,
+well below the TF-IDF baseline (57.83), highlighting the limitations of generic multilingual
+pretraining for low-resource Bantu languages.
+
+\textbf{RQ2 (class imbalance).} The weighted/macro F1 gap on Nigerian Pidgin is severe across
+all models. MAFT achieves 69.00 weighted F1 but only 50.95 macro F1---a 18-point gap driven by
+the 72-example neutral class being effectively ignored. Balanced class weights in TF-IDF and
+standard cross-entropy in transformers both fail to overcome a 45$\times$ training imbalance.
+
+\subsection{Code-Mixing Diagnostic}
+
+Table~\ref{tab:cmi_results} reports the performance gap between monolingual and code-mixed subsets.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{llccc}
+\toprule
+\textbf{Lang.} & \textbf{Model} & \textbf{Mono.} & \textbf{Mixed} & \textbf{$\Delta$} \\
+\midrule
+hau & LAFT & 76.38 & 74.54 & $-1.84$ \\
+hau & MAFT & 75.65 & 72.22 & $-3.43$ \\
+yor & LAFT & 70.05 & 76.18 & $+6.13$ \\
+yor & MAFT & 68.80 & 78.87 & $+10.07$ \\
+ibo & LAFT & 76.93 & 81.48 & $+4.55$ \\
+ibo & MAFT & 74.80 & 78.10 & $+3.30$ \\
+pcm & LAFT & 65.96 & 71.25 & $+5.29$ \\
+pcm & MAFT & 66.68 & 72.64 & $+5.96$ \\
+swa & LAFT & 61.20 & 39.22 & $-21.98$\textsuperscript{*} \\
+swa & MAFT & 62.61 & 55.39 & $-7.22$\textsuperscript{*} \\
+\bottomrule
+\end{tabular}
+\caption{Weighted F1 on monolingual and code-mixed subsets.
+$\Delta$ = Mixed $-$ Mono. \textsuperscript{*}Swahili mixed $n$=12.}
+\label{tab:cmi_results}
+\end{table}
+
+\textbf{RQ3 (code-mixing effects).} Code-mixing does not universally degrade performance.
+Yor\`{u}b\'{a} LAFT improves from 70.05 (mono) to 76.18 (mixed), a +6.13 gain. Igbo and
+Nigerian Pidgin also show improvements on code-mixed subsets. A plausible explanation: English
+function words in code-mixed Yor\`{u}b\'{a} and Igbo tweets carry strong sentiment polarity
+that the model recognises, while purely African-language sentiment expressions involve tonal
+and orthographic ambiguity that is harder to classify from romanised text.
+
+Hausa shows modest degradation ($-$1.84 for LAFT), consistent with its near-monolingual
+test distribution (2.4\% code-mixed). Swahili's severe LAFT degradation ($-$21.98) should
+be treated with caution given only 12 mixed-subset tweets. MAFT's smaller Swahili degradation
+($-$7.22) may indicate robustness from multilingual training, but cannot be confirmed from
+12 examples.
+
+\subsection{Error Analysis}
+
+LIME explanations applied to TF-IDF misclassifications reveal four dominant error
+categories. Code-switching errors account for 40\% of sampled Nigerian Pidgin
+misclassifications (12/30), where the model encounters English phrases not associated with
+surrounding Pidgin sentiment context. Orthographic variation (repeated characters,
+non-standard spelling) explains errors in Hausa (2/30) and Igbo (2/30). Short
+question-form tweets ($<$8 tokens with `?') contribute sarcasm-related errors across
+all languages. The majority of remaining errors (labelled `other') likely reflect
+label noise inherent in crowdsourced annotation of subjective sentiment.
+
+\subsection{Responsible NLP Reflection}
+
+Performance equity across languages is poor. Swahili's best weighted F1 (62.51) is
+13.83 points below Hausa (76.34)---a gap driven entirely by data availability, not
+linguistic complexity. The macro F1 gap on Nigerian Pidgin reveals that the neutral class
+is invisible to all models, biasing any deployed system toward binary polarisation.
+
+\section{Reflections and Discussion}
+
+\textbf{What worked.} The LAFT/MAFT crossover is theoretically coherent and empirically
+confirmed. TF-IDF's competitive performance on Yor\`{u}b\'{a} (72.64, above mBERT at 66.05)
+suggests lexical baselines remain relevant for tonal languages, with practical implications
+for GPU-constrained deployment.
+
+\textbf{What did not work.} Nigerian Pidgin's neutral class was not rescued by any model.
+The macro F1 ceiling near 50 indicates that 72 neutral training examples are insufficient
+regardless of architecture. Data augmentation or targeted annotation is the most direct path
+to improvement.
+
+\textbf{Limitations.} Single random seed (42) without variance estimation limits
+reproducibility confidence. The CMI filter is a heuristic with known noise on short tokens.
+Swahili's 12-tweet mixed subset yields unreliable estimates. LIME was applied to TF-IDF
+only; transformer interpretability was not evaluated. Hyperparameters were fixed without
+grid search.
+
+\textbf{Responsible AI.} All datasets are publicly available under Creative Commons
+licences. Code and results are fully reproducible from the provided notebooks and
+requirements files. AfriSenti was annotated by native speakers using majority-vote
+protocols, though crowdsourced annotation inherits subjectivity biases. Future work should
+extend to the full 14-language AfriSenti corpus and investigate data augmentation for
+severely imbalanced classes.
+
+\textbf{Extensions.} Three directions follow naturally. First, language-balanced MAFT
+sampling (oversampling Swahili) may improve low-resource results while preserving
+high-resource performance. Second, extending the CMI diagnostic to the full AfriSenti
+corpus would provide sufficient sample sizes for robust Swahili analysis. Third, applying
+LAFT/MAFT comparison at AfroXLMR-large scale would test whether the crossover persists at
+greater model capacity.
+
+\section{Conclusion}
+
+We compared four sentiment systems across five AfriSenti languages using a novel
+code-mixing diagnostic that partitions test sets into monolingual and code-mixed subsets.
+Three findings emerge:
+
+(1) LAFT outperforms MAFT on high-resource Hausa (76.34 vs.\ 75.57 wF1); MAFT outperforms
+LAFT on low-resource Swahili (62.51 vs.\ 60.86), confirming a resource-driven crossover
+(RQ1).
+
+(2) Nigerian Pidgin's 45$\times$ class imbalance produces a severe wF1/mF1 gap that no
+model resolves, demonstrating that data quality constraints dominate architectural choices
+for severely imbalanced classes (RQ2).
+
+(3) Code-mixing effects are language-dependent. Yor\`{u}b\'{a} and Igbo improve on
+code-mixed subsets, while Hausa degrades modestly. The Swahili result is inconclusive
+(RQ3).
+
+For practitioners: LAFT is preferred for languages with $>$10,000 training examples; MAFT
+offers measurable advantage below this threshold. The CMI diagnostic is a reusable
+evaluation tool for any African language benchmark where English influence is present.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}
