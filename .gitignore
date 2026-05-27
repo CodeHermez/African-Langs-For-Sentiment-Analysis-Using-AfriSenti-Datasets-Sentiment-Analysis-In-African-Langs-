@@ -1,0 +1,28 @@
+# Virtual environment
+envv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Ignore training outputs/models
+code/outputs/
+
+# Ignore dataset folder
+code/afrisent-semeval-2023/
+
+# Ignore result files
+code/*_results.json
+
+# Ignore HuggingFace caches
+.cache/
+huggingface/
+datasets/
+
+# Ignore logs
+logs/
+wandb/
+mlruns/
